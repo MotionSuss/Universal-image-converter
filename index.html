@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Image Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            border: 2px dashed #ccc;
+            padding: 30px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        #drop-area {
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #fileInput {
+            display: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #preview {
+            max-width: 100%;
+            max-height: 300px;
+            margin: 20px 0;
+            display: none;
+        }
+        .download-btn {
+            background-color: #008CBA;
+            display: none;
+        }
+        .download-btn:hover {
+            background-color: #0077a3;
+        }
+        .status {
+            margin: 10px 0;
+            color: #666;
+        }
+        .format-options {
+            display: none;
+            margin: 20px 0;
+        }
+        .format-btn {
+            background-color: #f1f1f1;
+            color: #333;
+            margin: 5px;
+            padding: 8px 15px;
+        }
+        .format-btn:hover {
+            background-color: #ddd;
+        }
+        .format-btn.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .quality-container {
+            display: none;
+            margin: 15px 0;
+        }
+        .quality-slider {
+            width: 200px;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Universal Image Converter -Motion Suss</h1>
+    <p>Convert any image to your preferred format</p>
+    
+    <div class="container">
+        <div id="drop-area">
+            <p>Drag & drop your image here or</p>
+            <button id="select-btn">Select Image</button>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        <img id="preview" alt="Preview">
+        <div class="status" id="status"></div>
+        
+        <div class="format-options" id="format-options">
+            <p>Select output format:</p>
+            <button class="format-btn" data-format="png">PNG</button>
+            <button class="format-btn" data-format="jpeg">JPEG</button>
+            <button class="format-btn" data-format="webp">WebP</button>
+            <button class="format-btn" data-format="gif">GIF</button>
+            <button class="format-btn" data-format="bmp">BMP</button>
+            <button class="format-btn" data-format="tiff">TIFF</button>
+        </div>
+        
+        <div class="quality-container" id="quality-container">
+            <label for="quality-slider">Quality: <span id="quality-value">90</span>%</label>
+            <input type="range" min="1" max="100" value="90" class="quality-slider" id="quality-slider">
+        </div>
+        
+        <button id="convert-btn" disabled>Convert Image</button>
+        <button id="download-btn" class="download-btn">Download</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const dropArea = document.getElementById('drop-area');
+            const fileInput = document.getElementById('fileInput');
+            const selectBtn = document.getElementById('select-btn');
+            const convertBtn = document.getElementById('convert-btn');
+            const downloadBtn = document.getElementById('download-btn');
+            const preview = document.getElementById('preview');
+            const status = document.getElementById('status');
+            const formatOptions = document.getElementById('format-options');
+            const qualityContainer = document.getElementById('quality-container');
+            const qualitySlider = document.getElementById('quality-slider');
+            const qualityValue = document.getElementById('quality-value');
+            const formatBtns = document.querySelectorAll('.format-btn');
+            
+            let originalFile = null;
+            let convertedBlob = null;
+            let selectedFormat = 'png';
+            let quality = 0.9;
+
+            // Update quality display
+            qualitySlider.addEventListener('input', function() {
+                quality = parseInt(qualitySlider.value) / 100;
+                qualityValue.textContent = qualitySlider.value;
+            });
+
+            // Format selection
+            formatBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    formatBtns.forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    selectedFormat = this.dataset.format;
+                    
+                    // Show quality slider for lossy formats
+                    if (selectedFormat === 'jpeg' || selectedFormat === 'webp') {
+                        qualityContainer.style.display = 'block';
+                    } else {
+                        qualityContainer.style.display = 'none';
+                    }
+                });
+            });
+
+            // Prevent default drag behaviors
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+
+            // Highlight drop area when item is dragged over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+
+            // Handle dropped files
+            dropArea.addEventListener('drop', handleDrop, false);
+
+            // Handle file selection via button
+            selectBtn.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', function(e) {
+                if (e.target.files.length) {
+                    handleFiles(e.target.files);
+                }
+            });
+
+            // Convert button click handler
+            convertBtn.addEventListener('click', convertImage);
+
+            // Download button click handler
+            downloadBtn.addEventListener('click', downloadImage);
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            function highlight() {
+                dropArea.style.borderColor = '#4CAF50';
+                dropArea.style.backgroundColor = '#f0fff0';
+            }
+
+            function unhighlight() {
+                dropArea.style.borderColor = '#ccc';
+                dropArea.style.backgroundColor = '';
+            }
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                handleFiles(files);
+            }
+
+            function handleFiles(files) {
+                if (files.length > 0) {
+                    originalFile = files[0];
+                    
+                    // Check if the file is an image
+                    if (!originalFile.type.match('image.*')) {
+                        status.textContent = 'Please select an image file.';
+                        return;
+                    }
+                    
+                    // Display preview
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                        convertBtn.disabled = false;
+                        downloadBtn.style.display = 'none';
+                        formatOptions.style.display = 'block';
+                        status.textContent = `Loaded: ${originalFile.name} (${formatFileSize(originalFile.size)})`;
+                        
+                        // Reset UI
+                        formatBtns[0].click(); // Select PNG by default
+                        qualitySlider.value = 90;
+                        qualityValue.textContent = '90';
+                        quality = 0.9;
+                    };
+                    reader.readAsDataURL(originalFile);
+                }
+            }
+
+            function convertImage() {
+                if (!originalFile) return;
+                
+                status.textContent = `Converting to ${selectedFormat.toUpperCase()}...`;
+                convertBtn.disabled = true;
+                
+                // Create a canvas element
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = function() {
+                    // Set canvas dimensions to image dimensions
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // Draw image on canvas
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Convert canvas to selected format
+                    let mimeType;
+                    switch(selectedFormat) {
+                        case 'jpeg':
+                            mimeType = 'image/jpeg';
+                            break;
+                        case 'png':
+                            mimeType = 'image/png';
+                            break;
+                        case 'webp':
+                            mimeType = 'image/webp';
+                            break;
+                        case 'gif':
+                            mimeType = 'image/gif';
+                            break;
+                        case 'bmp':
+                            mimeType = 'image/bmp';
+                            break;
+                        case 'tiff':
+                            mimeType = 'image/tiff';
+                            break;
+                        default:
+                            mimeType = 'image/png';
+                    }
+                    
+                    // Handle quality for formats that support it
+                    if (selectedFormat === 'jpeg' || selectedFormat === 'webp') {
+                        canvas.toBlob(function(blob) {
+                            convertedBlob = blob;
+                            downloadBtn.style.display = 'inline-block';
+                            status.textContent = `Conversion to ${selectedFormat.toUpperCase()} complete! Ready to download.`;
+                            convertBtn.disabled = false;
+                        }, mimeType, quality);
+                    } else {
+                        canvas.toBlob(function(blob) {
+                            convertedBlob = blob;
+                            downloadBtn.style.display = 'inline-block';
+                            status.textContent = `Conversion to ${selectedFormat.toUpperCase()} complete! Ready to download.`;
+                            convertBtn.disabled = false;
+                        }, mimeType);
+                    }
+                };
+                
+                img.onerror = function() {
+                    status.textContent = "Error loading image. Please try another file.";
+                    convertBtn.disabled = false;
+                };
+                
+                img.src = URL.createObjectURL(originalFile);
+            }
+
+            function downloadImage() {
+                if (!convertedBlob) return;
+                
+                const url = URL.createObjectURL(convertedBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // Set the filename (use original filename but with new extension)
+                let filename = originalFile.name;
+                const lastDot = filename.lastIndexOf('.');
+                if (lastDot !== -1) {
+                    filename = filename.substring(0, lastDot);
+                }
+                a.download = filename + '.' + selectedFormat;
+                
+                // Trigger download
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            }
+
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+        });
+    </script>
+</body>
+</html>
